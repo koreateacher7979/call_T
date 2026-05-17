@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스마트 퀵 학생 호출기 (교사용)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; }
+        .loader { border-top-color: #3B82F6; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-blue-50 text-gray-800 min-h-screen p-4 flex flex-col items-center">
+
+    <!-- 로딩 오버레이 -->
+    <div id="loading" class="fixed inset-0 bg-white/80 z-50 flex items-center justify-center hidden">
+        <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-16 w-16"></div>
+    </div>
+
+    <div class="w-full max-w-lg">
+        <div class="text-right text-xs text-gray-400 mb-2 tracking-tighter">
+            개발자: 가치있는 미래교육 연구소 대표 김병찬
+        </div>
+
+        <!-- 메인 호출 카드 -->
+        <div class="bg-white rounded-3xl shadow-xl shadow-blue-100/50 p-6 md:p-8 border border-blue-100 mb-8">
+            <h1 id="appTitle" class="text-2xl md:text-3xl font-bold text-blue-800 text-center mb-6">스마트 퀵 학생 호출기</h1>
+            
+            <div class="space-y-4">
+                <!-- 교사 선택 -->
+                <div>
+                    <label class="block text-sm font-medium text-blue-700 mb-1">호출하는 교사</label>
+                    <select id="teacherSelect" class="w-full p-3 rounded-xl border-none bg-blue-50 focus:ring-2 focus:ring-blue-400 text-gray-700 font-medium">
+                        <option value="">교사 선택</option>
+                    </select>
+                </div>
+
+                <!-- 학년/반 선택 -->
+                <div>
+                    <label class="block text-sm font-medium text-blue-700 mb-1">호출할 학년 반</label>
+                    <select id="classSelect" class="w-full p-3 rounded-xl border-none bg-blue-50 focus:ring-2 focus:ring-blue-400 text-gray-700 font-medium">
+                        <option value="">학년/반 선택</option>
+                    </select>
+                </div>
+
+                <!-- 학생 선택 -->
+                <div>
+                    <label class="block text-sm font-medium text-blue-700 mb-1">호출할 학생</label>
+                    <select id="studentSelect" class="w-full p-3 rounded-xl border-none bg-blue-50 focus:ring-2 focus:ring-blue-400 text-gray-700 font-medium disabled:opacity-50" disabled>
+                        <option value="">학생 선택</option>
+                    </select>
+                </div>
+
+                <!-- 호출 내용 -->
+                <div>
+                    <label class="block text-sm font-medium text-blue-700 mb-1">호출 내용 (선택사항)</label>
+                    <input type="text" id="reasonInput" placeholder="예) 교무실로 내려오세요." class="w-full p-3 rounded-xl border-none bg-blue-50 focus:ring-2 focus:ring-blue-400 text-gray-700 font-medium placeholder-blue-300">
+                </div>
+
+                <!-- 호출 버튼 -->
+                <button onclick="submitCall()" class="w-full mt-4 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-300/50 transition-all transform hover:-translate-y-1 active:translate-y-0 text-lg">
+                    🔔 즉시 호출하기
+                </button>
+            </div>
+        </div>
+
+        <!-- 최근 호출 기록 -->
+        <div>
+            <h2 class="text-lg font-bold text-blue-900 mb-4 flex items-center">
+                <span class="bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded-md mr-2">실시간</span> 
+                최근 호출 내역 (10건)
+            </h2>
+            <div id="recentCallsList" class="space-y-3">
+                <!-- 내역 렌더링 영역 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 여기에 앱스 스크립트 배포 URL을 입력하세요!
+        // ==========================================
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyqo0MToVmfvPkzyNgsRGG6nv4p4_IVmyD_4OzL_EPn-D8N7v0ZcbXxB_kYAFyH4SAN/exec"; 
+
+        let globalStudentsData = {};
+
+        // 초기 데이터 로드
+        async function init() {
+            if(WEB_APP_URL.includes("여기에")) {
+                alert("앱스스크립트 배포 URL을 코드 상단에 입력해주세요.");
+                return;
+            }
+            showLoading(true);
+            try {
+                const res = await fetch(`${WEB_APP_URL}?action=getData`);
+                const data = await res.json();
+                
+                // 제목 설정
+                document.getElementById('appTitle').innerText = `${data.schoolName} 스마트 퀵 호출`;
+                document.title = `${data.schoolName} 스마트 호출기`;
+
+                // 교사 목록 세팅
+                const tSelect = document.getElementById('teacherSelect');
+                data.teachers.forEach(t => tSelect.add(new Option(t, t)));
+
+                // 반 목록 세팅
+                const cSelect = document.getElementById('classSelect');
+                data.classes.forEach(c => cSelect.add(new Option(c, c)));
+
+                globalStudentsData = data.students;
+
+                // 최근 기록 세팅
+                renderRecentCalls(data.recentCalls);
+
+            } catch (error) {
+                alert("데이터 연동에 실패했습니다. 스프레드시트 설정과 URL을 확인해주세요.");
+                console.error(error);
+            }
+            showLoading(false);
+        }
+
+        // 반 선택 시 학생 목록 업데이트
+        document.getElementById('classSelect').addEventListener('change', (e) => {
+            const className = e.target.value;
+            const sSelect = document.getElementById('studentSelect');
+            sSelect.innerHTML = '<option value="">학생 선택</option>';
+            
+            if (className && globalStudentsData[className]) {
+                sSelect.disabled = false;
+                globalStudentsData[className].forEach(s => sSelect.add(new Option(s, s)));
+            } else {
+                sSelect.disabled = true;
+            }
+        });
+
+        // 호출 전송
+        async function submitCall() {
+            const teacher = document.getElementById('teacherSelect').value;
+            const className = document.getElementById('classSelect').value;
+            const studentName = document.getElementById('studentSelect').value;
+            const reason = document.getElementById('reasonInput').value || "선생님께서 호출하셨습니다.";
+
+            if (!teacher || !className || !studentName) {
+                alert("교사, 학년/반, 학생을 모두 선택해주세요.");
+                return;
+            }
+
+            const fullStudentInfo = `${className} ${studentName}`;
+            showLoading(true);
+
+            try {
+                const url = `${WEB_APP_URL}?action=addCall&teacher=${encodeURIComponent(teacher)}&student=${encodeURIComponent(fullStudentInfo)}&reason=${encodeURIComponent(reason)}`;
+                const res = await fetch(url);
+                const result = await res.json();
+
+                if (result.success) {
+                    // 기록 업데이트
+                    renderRecentCalls(result.recentCalls);
+                    // 입력창 초기화
+                    document.getElementById('studentSelect').value = "";
+                    document.getElementById('reasonInput').value = "";
+                } else {
+                    alert("호출 기록에 실패했습니다.");
+                }
+            } catch (error) {
+                alert("통신 오류가 발생했습니다.");
+            }
+            showLoading(false);
+        }
+
+        // 최근 기록 렌더링
+        function renderRecentCalls(calls) {
+            const list = document.getElementById('recentCallsList');
+            list.innerHTML = "";
+            if(calls.length === 0) {
+                list.innerHTML = `<div class="text-center text-gray-500 py-4 bg-white rounded-xl shadow-sm border border-blue-50">최근 호출 기록이 없습니다.</div>`;
+                return;
+            }
+
+            calls.forEach(call => {
+                const item = document.createElement('div');
+                item.className = "bg-white p-4 rounded-2xl shadow-sm shadow-blue-100 border-l-4 border-blue-400 flex flex-col md:flex-row md:items-center justify-between gap-2";
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-bold text-blue-400 bg-blue-50 px-2 py-1 rounded">${call.time}</span>
+                        <div>
+                            <span class="font-bold text-gray-800 text-lg block md:inline">${call.student}</span>
+                            <span class="text-sm text-gray-500 ml-1">(${call.teacher} T)</span>
+                        </div>
+                    </div>
+                    <div class="text-blue-700 font-medium text-sm md:text-base md:text-right bg-blue-50/50 px-3 py-1 rounded-lg">
+                        💬 ${call.reason}
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'flex' : 'none';
+        }
+
+        // 앱 시작
+        window.onload = init;
+    </script>
+</body>
+</html>
