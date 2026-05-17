@@ -10,21 +10,31 @@
         body { font-family: 'Noto Sans KR', sans-serif; }
         .loader { border-top-color: #3B82F6; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
         @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* 토스트 메시지 애니메이션 */
+        .toast-enter { transform: translateY(100%); opacity: 0; }
+        .toast-enter-active { transform: translateY(0); opacity: 1; transition: all 0.3s ease-out; }
+        .toast-exit { transform: translateY(0); opacity: 1; }
+        .toast-exit-active { transform: translateY(100%); opacity: 0; transition: all 0.3s ease-in; }
     </style>
 </head>
-<body class="bg-blue-50 text-gray-800 min-h-screen p-4 flex flex-col items-center">
+<body class="bg-blue-50 text-gray-800 min-h-screen p-4 flex flex-col items-center relative overflow-hidden">
 
-    <!-- 로딩 오버레이 -->
     <div id="loading" class="fixed inset-0 bg-white/80 z-50 flex items-center justify-center hidden">
         <div class="loader ease-linear rounded-full border-8 border-t-8 border-gray-200 h-16 w-16"></div>
     </div>
 
-    <div class="w-full max-w-lg">
+    <!-- 커스텀 메시지 팝업 (Toast) -->
+    <div id="toastMessage" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg z-50 toast-enter hidden flex items-center gap-2 max-w-[90vw] w-max">
+        <span id="toastIcon">ℹ️</span>
+        <span id="toastText" class="text-sm font-medium">메시지 내용</span>
+    </div>
+
+    <div class="w-full max-w-lg pb-20">
         <div class="text-right text-xs text-gray-400 mb-2 tracking-tighter">
             개발자: 가치있는 미래교육 연구소 대표 김병찬
         </div>
 
-        <!-- 메인 호출 카드 -->
         <div class="bg-white rounded-3xl shadow-xl shadow-blue-100/50 p-6 md:p-8 border border-blue-100 mb-8">
             <h1 id="appTitle" class="text-2xl md:text-3xl font-bold text-blue-800 text-center mb-6">스마트 퀵 학생 호출기</h1>
             
@@ -66,7 +76,6 @@
             </div>
         </div>
 
-        <!-- 최근 호출 기록 -->
         <div>
             <h2 class="text-lg font-bold text-blue-900 mb-4 flex items-center">
                 <span class="bg-blue-200 text-blue-800 text-xs px-2 py-1 rounded-md mr-2">실시간</span> 
@@ -82,14 +91,39 @@
         // ==========================================
         // 여기에 앱스 스크립트 배포 URL을 입력하세요!
         // ==========================================
-        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxpMCgWnr3CNn09b4oGPMEn2Ngp0-mWiQ3XdopHmB-ww2qLhoI-h_PvGMnK2vdibsKY/exec"; 
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwlbQ7WHe3wu5SwGYzlogliTMULV1wMzTn0DA55-9Q-4njTwKVWqeRdeB0kG3ab-Qz7/exec"; 
 
         let globalStudentsData = {};
+        let toastTimeout;
 
-        // 초기 데이터 로드
+        // 커스텀 알림창 함수 (alert 대체)
+        function showMessage(msg, isError = false) {
+            const toast = document.getElementById('toastMessage');
+            const toastText = document.getElementById('toastText');
+            const toastIcon = document.getElementById('toastIcon');
+            
+            clearTimeout(toastTimeout);
+            
+            toastText.innerText = msg;
+            toastIcon.innerText = isError ? "⚠️" : "✅";
+            toast.classList.replace(isError ? 'bg-gray-800' : 'bg-red-500', isError ? 'bg-red-500' : 'bg-gray-800');
+            
+            toast.classList.remove('hidden', 'toast-exit', 'toast-exit-active');
+            toast.classList.add('toast-enter-active');
+            
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('toast-enter-active');
+                toast.classList.add('toast-exit-active');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                    toast.classList.remove('toast-exit-active');
+                }, 300);
+            }, 3000);
+        }
+
         async function init() {
             if(WEB_APP_URL.includes("여기에")) {
-                alert("앱스스크립트 배포 URL을 코드 상단에 입력해주세요.");
+                showMessage("소스코드에 웹앱 URL을 입력해주세요.", true);
                 return;
             }
             showLoading(true);
@@ -97,10 +131,8 @@
                 const res = await fetch(`${WEB_APP_URL}?action=getData`);
                 const data = await res.json();
                 
-                // 앱스 스크립트 단에서 오류가 발생한 경우 잡아냄
                 if(data.error) {
-                    console.error("서버 에러:", data.error);
-                    alert("데이터를 불러오는 중 오류가 발생했습니다.\n상세: " + data.error);
+                    showMessage("데이터 로드 실패: " + data.error, true);
                     showLoading(false);
                     return;
                 }
@@ -113,9 +145,19 @@
                 const tSelect = document.getElementById('teacherSelect');
                 data.teachers.forEach(t => tSelect.add(new Option(t, t)));
 
-                // 반 목록 세팅
+                // 학년/반 텍스트 자동 변환 함수 (예: "1-1" -> "1학년 1반(1-1)")
+                function formatClassName(name) {
+                    const str = String(name);
+                    const match = str.match(/^(\d+)[-\s](\d+)$/); // 1-1 또는 1 1 형태 감지
+                    if(match) return `${match[1]}학년 ${match[2]}반(${str})`;
+                    return str; // 매치 안 되면 시트 글자 그대로 출력
+                }
+
+                // 반 목록 세팅 (형식 변환 적용)
                 const cSelect = document.getElementById('classSelect');
-                data.classes.forEach(c => cSelect.add(new Option(c, c)));
+                data.classes.forEach(c => {
+                    cSelect.add(new Option(formatClassName(c), c));
+                });
 
                 globalStudentsData = data.students;
 
@@ -123,7 +165,7 @@
                 renderRecentCalls(data.recentCalls);
 
             } catch (error) {
-                alert("데이터 연동에 실패했습니다. 스프레드시트 설정과 URL을 확인해주세요.");
+                showMessage("통신 차단됨! '모든 사용자'로 앱스스크립트를 새 배포 해주세요.", true);
                 console.error(error);
             }
             showLoading(false);
@@ -151,7 +193,7 @@
             const reason = document.getElementById('reasonInput').value || "선생님께서 호출하셨습니다.";
 
             if (!teacher || !className || !studentName) {
-                alert("교사, 학년/반, 학생을 모두 선택해주세요.");
+                showMessage("교사, 학년/반, 학생을 모두 선택해주세요.", true);
                 return;
             }
 
@@ -166,14 +208,15 @@
                 if (result.success) {
                     // 기록 업데이트
                     renderRecentCalls(result.recentCalls);
-                    // 입력창 초기화
+                    // 입력창 초기화 및 성공 메시지
                     document.getElementById('studentSelect').value = "";
                     document.getElementById('reasonInput').value = "";
+                    showMessage(`${studentName} 학생을 성공적으로 호출했습니다.`);
                 } else {
-                    alert("호출 기록에 실패했습니다.");
+                    showMessage("호출 기록에 실패했습니다.", true);
                 }
             } catch (error) {
-                alert("통신 오류가 발생했습니다.");
+                showMessage("통신 오류가 발생했습니다. 권한 설정을 확인하세요.", true);
             }
             showLoading(false);
         }
