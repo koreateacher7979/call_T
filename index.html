@@ -82,7 +82,7 @@
         // ==========================================
         // 여기에 앱스 스크립트 배포 URL을 입력하세요!
         // ==========================================
-        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyqo0MToVmfvPkzyNgsRGG6nv4p4_IVmyD_4OzL_EPn-D8N7v0ZcbXxB_kYAFyH4SAN/exec"; 
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxpMCgWnr3CNn09b4oGPMEn2Ngp0-mWiQ3XdopHmB-ww2qLhoI-h_PvGMnK2vdibsKY/exec"; 
 
         let globalStudentsData = {};
 
@@ -97,6 +97,14 @@
                 const res = await fetch(`${WEB_APP_URL}?action=getData`);
                 const data = await res.json();
                 
+                // 앱스 스크립트 단에서 오류가 발생한 경우 잡아냄
+                if(data.error) {
+                    console.error("서버 에러:", data.error);
+                    alert("데이터를 불러오는 중 오류가 발생했습니다.\n상세: " + data.error);
+                    showLoading(false);
+                    return;
+                }
+
                 // 제목 설정
                 document.getElementById('appTitle').innerText = `${data.schoolName} 스마트 퀵 호출`;
                 document.title = `${data.schoolName} 스마트 호출기`;
